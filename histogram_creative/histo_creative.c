@@ -391,19 +391,54 @@ long* histogram(char* fn_input) {
   histo = malloc(256*sizeof(long));
   image = Image_Read(fn_input);
 
+
+  int max_num_threads = omp_get_max_threads();
+  long *arr[max_num_threads];
+  for (i=0; i<max_num_threads; i++) {
+    arr[i] = (long *)malloc(256* sizeof(long));
+  }
+
+
+  for (i=0; i<max_num_threads; i++) {
+    for (j=0; j<256; j++) {
+      arr[i][j] = 0;
+    }
+  }
+  
+  
   t_start = omp_get_wtime();
 
   /* obtain histogram from image, repeated 100 times */
+  
   for (m=0; m<100; m++) {
+#pragma omp parallel for default(shared) private(i)
     for (i=0; i<image->row; i++) {
+#pragma omp parallel for default(shared) private(j)
       for (j=0; j<image->col; j++) {
-        histo[image->content[i][j]]++;
+	long idx = image->content[i][j];
+	#pragma omp atomic update
+        arr[omp_get_thread_num()][idx]++;
       }
     }
   }
+  
+  
+  for (i=0; i<max_num_threads; i++) {
+    for (j=0; j<256; j++) {
+      histo[j] += arr[i][j];
+    }
+  }
 
+  
   t_end = omp_get_wtime();
 
+  for (i=0; i<max_num_threads; i++) {
+    free(arr[i]);
+  }
+  //  free(arr);
+
+
+  
  /* ------- Termination */
   Image_Destroy(&image);
   printf("--- Histogram Content ---\n");
